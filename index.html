@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chaves do torneio · Rollback KOF XIII</title>
+<style>
+  :root {
+    --bg: #0d0f0e; --panel: #151918; --border: #262c2a; --fg: #e8ecea; --dim: #8b9591;
+    --accent: #4ade80; --busy: #f5a524; --me: #7dd3fc; --lose: #5c6461;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.4 "Segoe UI", system-ui, sans-serif; }
+  header { padding: 22px 16px 10px; max-width: 1400px; margin: 0 auto; }
+  .kick { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+  h1 { margin: 2px 0 4px; font-size: 26px; }
+  .sub { color: var(--dim); font-size: 13px; }
+  .camp { margin-top: 12px; display: inline-block; padding: 8px 14px; border: 1px solid var(--busy); border-radius: 8px;
+          color: var(--busy); font-weight: 700; }
+  main { max-width: 1400px; margin: 0 auto; padding: 0 16px 40px; }
+  h2 { font-size: 13px; color: var(--dim); letter-spacing: .08em; margin: 26px 0 10px; }
+  .chave { display: flex; gap: 18px; overflow-x: auto; padding-bottom: 8px; scrollbar-color: var(--border) var(--bg); }
+  .rodada { display: flex; flex-direction: column; min-width: 230px; }
+  .rodada > .tit { color: var(--dim); font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+  .lutas { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: 12px; }
+  .luta { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .luta.vivo { border-color: var(--busy); }
+  .lado { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; }
+  .lado + .lado { border-top: 1px solid var(--border); }
+  .nome { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lado.venceu .nome { color: var(--accent); font-weight: 700; }
+  .lado.perdeu .nome, .lado.vazio .nome { color: var(--lose); }
+  .pts { font-variant-numeric: tabular-nums; color: var(--dim); }
+  .lado.venceu .pts { color: var(--fg); font-weight: 700; }
+  .tag { font-size: 11px; padding: 3px 10px; color: var(--dim); border-top: 1px solid var(--border); display: flex;
+         justify-content: space-between; }
+  .tag .on { color: var(--busy); font-weight: 700; }
+  .lista { display: flex; flex-wrap: wrap; gap: 8px; }
+  .lista span { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; }
+  .msg { color: var(--dim); padding: 40px 16px; text-align: center; }
+  footer { color: var(--dim); font-size: 12px; text-align: center; padding: 20px 16px; }
+</style>
+</head>
+<body>
+<header id="topo"><div class="kick">TORNEIO · ROLLBACK KOF XIII</div><h1>Carregando...</h1></header>
+<main id="corpo"></main>
+<footer>Atualiza sozinha a cada 20 segundos · dupla eliminação: perdeu 2 vezes, está fora</footer>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const hora = (t) => t ? new Date(t).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit",
+  month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+
+function luta(m, nome) {
+  const vivo = m.estado === "luta" || m.estado === "chamada";
+  const lado = (i) => {
+    const id = m.p[i];
+    const fim = m.estado === "fim";
+    const cls = id === null || id === "BYE" ? "vazio" : fim ? (m.vencedor === id ? "venceu" : "perdeu") : "";
+    const pts = m.wo ? (fim && m.vencedor === id ? "W.O." : "") : (fim || m.estado === "luta" ? m.placar[i] : "");
+    return `<div class="lado ${cls}"><span class="nome">${esc(nome(id))}</span><span class="pts">${pts}</span></div>`;
+  };
+  const est = { luta: "AO VIVO", chamada: "chamando", pronta: m.adiada ? "adiada" : "a jogar", espera: "", fim: "" }[m.estado];
+  return `<div class="luta${vivo ? " vivo" : ""}">${lado(0)}${lado(1)}
+    <div class="tag"><span class="${vivo ? "on" : ""}">${esc(est)}</span><span>FT-${m.ft}</span></div></div>`;
+}
+
+function chave(lutas, nome, titulo) {
+  const rod = {};
+  for (const m of lutas) (rod[m.label] = rod[m.label] || []).push(m);
+  const cols = Object.entries(rod).map(([label, ms]) =>
+    `<div class="rodada"><div class="tit">${esc(label.split(" · ").pop().toUpperCase())}</div><div class="lutas">${ms.map((m) => luta(m, nome)).join("")}</div></div>`);
+  return cols.length ? `<h2>${titulo}</h2><div class="chave">${cols.join("")}</div>` : "";
+}
+
+// a mesma página serve no servidor (/t/<id>) e no GitHub Pages do Slipcar (/chaves/#<id>), que lê os dados do servidor
+const SERVIDOR = "https://kof13-lobby.carlito-luiscarlos.workers.dev";
+function torneio() {
+  const m = location.pathname.match(/\/t\/([a-z0-9]{8})/);
+  return m ? m[1] : (location.hash.slice(1).match(/^[a-z0-9]{8}/) || [""])[0];
+}
+
+async function carregar() {
+  let d;
+  try {
+    const id = torneio();
+    const base = location.hostname.endsWith(".workers.dev") ? "" : SERVIDOR;
+    const r = id ? await fetch(base + "/t/" + id + "/dados", { cache: "no-store" }) : { ok: false };
+    d = r.ok ? await r.json() : null;
+  } catch (e) { return; }
+  if (!d) {
+    $("#topo h1").textContent = "Torneio não encontrado";
+    $("#corpo").innerHTML = `<p class="msg">Confira o link. Ele é criado quando o torneio abre as inscrições.</p>`;
+    return;
+  }
+  const nomes = d.nomes || {};
+  const nome = (id) => id === null ? "a definir" : id === "BYE" ? "—" : (nomes[id] || "?");
+  const lutas = (d.lutas || []).filter((m) => !m.pulada);
+  const feitas = lutas.filter((m) => m.estado === "fim").length;
+  document.title = `${d.sala || "Torneio"} · chaves`;
+  $("#topo h1").textContent = d.sala || "Torneio";
+  const sit = d.estado === "inscricao" ? `Inscrições abertas · ${d.inscritos.length} inscrito(s)` :
+    d.estado === "jogando" ? `Em andamento · ${feitas} de ${lutas.length} lutas` : (d.campeao ? "Encerrado" : "Encerrado sem campeão");
+  $("#topo").innerHTML = `<div class="kick">TORNEIO · ROLLBACK KOF XIII</div><h1>${esc(d.sala || "Torneio")}</h1>
+    <div class="sub">${esc(sit)} · atualizado ${esc(hora(d.atualizado))} (Brasília)</div>
+    ${d.campeao ? `<div class="camp">🏆 Campeão: ${esc(nome(d.campeao))}</div>` : ""}`;
+  if (d.estado === "inscricao" || !lutas.length) {
+    $("#corpo").innerHTML = `<h2>INSCRITOS</h2><div class="lista">${d.inscritos.map((p) => `<span>${esc(p.nome)}</span>`).join("")}</div>`;
+    return;
+  }
+  const fora = (d.fora || []).map(nome);
+  $("#corpo").innerHTML =
+    chave(lutas.filter((m) => m.chave === "W"), nome, "CHAVE DOS VENCEDORES") +
+    chave(lutas.filter((m) => m.chave === "L"), nome, "CHAVE DOS PERDEDORES") +
+    chave(lutas.filter((m) => m.chave === "GF"), nome, "GRANDE FINAL") +
+    (fora.length ? `<h2>DESISTIRAM / DESCLASSIFICADOS</h2><div class="lista">${fora.map((n) => `<span>${esc(n)}</span>`).join("")}</div>` : "");
+}
+carregar();
+setInterval(carregar, 20000);
+addEventListener("hashchange", carregar);
+</script>
+</body>
+</html>
